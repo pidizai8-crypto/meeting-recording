@@ -1,0 +1,73 @@
+{
+  "name": "dsh-meeting-recorder",
+  "version": "1.5.1",
+  "description": "Record meetings, transcribe locally with SenseVoice, group speakers by voice, and keep a rich notebook and meeting history.",
+  "type": "module",
+  "license": "MIT",
+  "author": {
+    "name": "pidizai",
+    "email": "360213709+pidizai8-crypto@users.noreply.github.com",
+    "url": "https://github.com/pidizai8-crypto"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pidizai8-crypto/meeting-recording.git"
+  },
+  "homepage": "https://github.com/pidizai8-crypto/meeting-recording#readme",
+  "bugs": {
+    "url": "https://github.com/pidizai8-crypto/meeting-recording/issues"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "meeting",
+    "recorder",
+    "transcription",
+    "speaker-grouping",
+    "sensevoice"
+  ],
+  "engines": { "dsh": ">=0.2.2-rc.5 <0.3.0" },
+  "exports": { ".": "./index.js", "./client": "./client.js", "./locale/*.json": "./locale/*.json", "./icon": "./icon.svg" },
+  "files": [
+    "index.js",
+    "archive.js",
+    "engine.js",
+    "recognize-turns.js",
+    "speaker-turns.js",
+    "voice-embedding.js",
+    "voice-engine/worker.cjs",
+    "voice-engine/*.onnx",
+    "voice-engine/LICENSE-*.txt",
+    "voice-engine/NOTICE.md",
+    "loopback.js",
+    "Loopback.cs",
+    "client.js",
+    "cordis.patch.yml",
+    "icon.svg",
+    "locale/*.json",
+    "assets/*.png",
+    "README.md",
+    "README.zh.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "THIRD_PARTY_NOTICES.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test tests/notebook-editor.test.mjs tests/meeting-recognition.test.mjs tests/speaker-turns.test.mjs"
+  },
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-sidebar-right",
+        "@deepseek-ai/dsh-client-connection"
+      ]
+    }
+  }
+}

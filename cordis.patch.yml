@@ -1,0 +1,4 @@
+- insert:
+    - id: dsh-meeting-recorder
+      name: 'dsh-meeting-recorder'
+      config: {}

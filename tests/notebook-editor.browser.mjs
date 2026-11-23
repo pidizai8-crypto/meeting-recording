@@ -1,0 +1,188 @@
+// Run with an isolated, synthetic React fixture. The caller owns its browser page.
+// fixtureLoad(text, format) mounts a new keyed RecorderMarkdownEditor. Its parent
+// synchronously appends emitted Markdown to window.changes and echoes the new props.
+import assert from 'node:assert/strict'
+
+export async function checkRecorderEditor(page) {
+  const visual = '.mn-md-content'
+  const last = () => page.evaluate(() => window.changes.at(-1))
+  const load = async (value, format = 'markdown') => {
+    await page.evaluate(([source, type]) => { window.fixtureLoad(source, type) }, [value, format])
+    await page.waitForFunction(() => !document.querySelector('.mn-md-visual').hidden)
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+  }
+  const select = async (start, end = start) => {
+    await page.click(visual)
+    await page.keyboard.press('ControlOrMeta+Home')
+    for (let i = 0; i < start; i++) await page.keyboard.press('ArrowRight')
+    for (let i = start; i < end; i++) await page.keyboard.press('Shift+ArrowRight')
+  }
+  const pressed = label => page.evaluate(name => document.querySelector(`button[aria-label="${name}"]`).getAttribute('aria-pressed'), label)
+  const labels = []
+
+  await load('甲乙丙')
+  await select(1, 2)
+  await page.selectOption('select[aria-label="文字颜色"]', '#d14c46')
+  assert.equal(await last(), '甲<span style="color: #d14c46">乙</span>丙')
+  assert.equal(await page.evaluate(() => document.querySelector('.mn-md-color select').value), '#d14c46')
+  await page.selectOption('select[aria-label="文字颜色"]', { label: '默认颜色' })
+  assert.equal(await last(), '甲乙丙')
+  await page.click('button[aria-label="加粗"]')
+  assert.equal(await last(), '甲**乙**丙')
+  await page.keyboard.press('ControlOrMeta+z')
+  assert.equal(await last(), '甲乙丙')
+  await page.keyboard.press('ControlOrMeta+Shift+z')
+  assert.equal(await last(), '甲**乙**丙')
+  labels.push('selection color apply/reset, bold, undo/redo')
+
+  // Word-style mixed selection: Bold applies to every run instead of unbolding.
+  await load('甲**乙**丙')
+  await select(0, 3)
+  assert.equal(await pressed('加粗'), 'mixed')
+  await page.click('button[aria-label="加粗"]')
+  assert.equal(await last(), '**甲乙丙**')
+  assert.equal(await pressed('加粗'), 'true')
+  await page.click('button[aria-label="加粗"]')
+  assert.equal(await last(), '甲乙丙')
+  labels.push('mixed selection becomes uniformly bold and toggles back')
+
+  // Applying color to a mixed selection keeps existing bold runs.
+  await load('甲**乙**丙')
+  await select(0, 3)
+  await page.selectOption('select[aria-label="文字颜色"]', '#23825d')
+  const colored = await last()
+  assert.match(colored, /\*\*/)
+  assert.match(colored, /#23825d/)
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.mn-md-content strong').length), 1)
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.mn-md-content span[style]').length), 1)
+  await load(colored)
+  assert.equal(await page.evaluate(() => document.querySelector('.mn-md-content').innerText), '甲乙丙')
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.mn-md-content strong').length), 1)
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.mn-md-content span[style]').length), 1)
+  await load('甲<span style="color: #d14c46">乙</span><span style="color: #23825d">丙</span>')
+  await page.click(visual)
+  await page.keyboard.press('ControlOrMeta+a')
+  assert.equal(await page.evaluate(() => document.querySelector('.mn-md-color').dataset.mixed), 'true')
+  assert.match(await page.evaluate(() => document.querySelector('.mn-md-color').title), /多种颜色/)
+  labels.push('color preserves bold; both styles survive remount; mixed-color indicator')
+
+  // Typing over a selected run adopts the first selected character's style.
+  await load('甲**乙**丙')
+  await select(1, 2)
+  await page.keyboard.insertText('X')
+  assert.equal(await last(), '甲**X**丙')
+  await load('甲<span style="color: #d14c46">乙</span>丙')
+  await select(1, 2)
+  await page.keyboard.insertText('Y')
+  assert.equal(await last(), '甲<span style="color: #d14c46">Y</span>丙')
+  labels.push('replacement typing keeps the selected bold and color')
+
+  // Bulleted and numbered lists, list item splitting and converting list type.
+  await load('行动项')
+  await select(3)
+  await page.click('button[aria-label="标题"]')
+  assert.equal(await last(), '## 行动项')
+  await page.click('button[aria-label="标题"]')
+  await page.click('button[aria-label="项目符号"]')
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.mn-md-content ul li').length), 1)
+  assert.equal(await pressed('项目符号'), 'true')
+  await page.keyboard.press('Enter')
+  await page.keyboard.insertText('跟进')
+  assert.equal(await page.evaluate(() => Array.from(document.querySelectorAll('.mn-md-content li'), li => li.textContent).join('/')), '行动项/跟进')
+  await page.click('button[aria-label="项目符号"]')
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.mn-md-content ul li').length), 1)
+  await page.click('button[aria-label="编号列表"]')
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.mn-md-content ol li').length), 1)
+  await load('* 甲\n* 乙')
+  await page.click(visual)
+  await page.keyboard.press('ControlOrMeta+a')
+  await page.click('button[aria-label="编号列表"]')
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.mn-md-content ol > li').length), 2)
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.mn-md-content ul').length), 0)
+  await load('* 甲\n* 乙')
+  await page.click(visual)
+  await page.keyboard.press('ControlOrMeta+a')
+  await page.click('button[aria-label="项目符号"]')
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.mn-md-content ul').length), 0)
+  assert.equal(await page.evaluate(() => Array.from(document.querySelectorAll('.mn-md-content p'), p => p.textContent).join('/')), '甲/乙')
+
+  // Mixed selections apply the chosen list to list items and plain paragraphs.
+  await load('* 甲\n* 乙\n\n普通段落')
+  await page.click(visual)
+  await page.keyboard.press('ControlOrMeta+a')
+  await page.click('button[aria-label="编号列表"]')
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.mn-md-content ol > li').length), 3)
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.mn-md-content ul').length), 0)
+  await load('* 甲\n1. 乙')
+  await page.click(visual)
+  await page.keyboard.press('ControlOrMeta+a')
+  await page.click('button[aria-label="项目符号"]')
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.mn-md-content ul > li').length), 2)
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.mn-md-content ol').length), 0)
+  labels.push('bulleted/numbered lists, Enter split, type conversion, removal and mixed selection')
+
+  // Copying a styled slice and pasting it inside the notebook keeps color.
+  await load('甲<span style="color: #d14c46">乙</span>丙')
+  await select(1, 2)
+  await page.evaluate(() => {
+    const view = document.querySelector('.mn-md-content'), data = new DataTransfer()
+    const event = new ClipboardEvent('copy', { bubbles: true, cancelable: true })
+    Object.defineProperty(event, 'clipboardData', { value: data })
+    view.dispatchEvent(event)
+    window.__notebookClipboard = data
+  })
+  await page.click(visual)
+  await page.keyboard.press('ControlOrMeta+End')
+  await page.evaluate(() => {
+    const view = document.querySelector('.mn-md-content')
+    const event = new ClipboardEvent('paste', { bubbles: true, cancelable: true })
+    Object.defineProperty(event, 'clipboardData', { value: window.__notebookClipboard })
+    view.dispatchEvent(event)
+  })
+  assert.equal(await page.evaluate(() => document.querySelector('.mn-md-content').innerText), '甲乙丙乙')
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.mn-md-content span[style]').length), 2)
+  labels.push('internal copy/paste preserves character color')
+
+  const opaque = '## 议题\r\n\r\n:::custom\r\n[x]: /where\r\n:::\r\n\r\n'
+  await load(opaque)
+  assert.equal(await page.evaluate(() => window.changes.length), 0)
+  labels.push('unknown Markdown syntax stays untouched until edited')
+
+  await load('# 原文 **原样**\n第二行', 'plain')
+  assert.equal(await page.evaluate(() => document.querySelector('.mn-md-content').innerText), '# 原文 **原样**\n第二行')
+  await page.click(visual)
+  await page.keyboard.press('ControlOrMeta+End')
+  await page.keyboard.insertText('！')
+  const migrated = await last()
+  assert.match(migrated, /^\\# 原文 \\\*\\\*原样\\\*\\\*/)
+  await load(migrated)
+  assert.equal(await page.evaluate(() => document.querySelector('.mn-md-content').innerText), '# 原文 **原样**\n第二行！')
+  labels.push('legacy literal text migrates on first edit, round-trips visually')
+
+  await load('![图](https://example.invalid/mn-remote-image) <img src="https://example.invalid/mn-raw-image"> <a href="javascript:void(0)">字</a>')
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.mn-md-content img[src], .mn-md-content a, .mn-md-content iframe, .mn-md-content script').length), 0)
+  await page.click(visual)
+  await page.keyboard.press('ControlOrMeta+End')
+  await page.keyboard.paste({ text: '纯文本', html: '<img src="https://example.invalid/mn-paste"><b>虚构</b>' })
+  assert.ok((await last()).endsWith('纯文本'))
+  assert.equal(await page.evaluate(() => performance.getEntriesByType('resource').filter(r => r.name.includes('example.invalid')).length), 0)
+  labels.push('inert HTML/image syntax and foreign HTML ignored, zero remote resources')
+
+  await load('甲')
+  await page.focus('button[aria-label="加粗"]')
+  await page.keyboard.press('Enter')
+  assert.equal(await page.evaluate(() => document.activeElement.getAttribute('aria-label')), '加粗')
+  labels.push('keyboard toolbar activation keeps button focus')
+
+  await load('')
+  assert.equal(await page.evaluate(() => document.querySelector('.mn-md-content').dataset.placeholder), '写下议程或待讨论的问题…')
+  await page.evaluate(() => { window.limitDisabled = true; window.fixtureRefresh() })
+  await page.waitForFunction(() => document.querySelector('.mn-md-content').contentEditable === 'false')
+  const before = await page.evaluate(() => window.changes.length)
+  await page.keyboard.press('ControlOrMeta+a')
+  await page.keyboard.insertText('不可写')
+  assert.equal(await page.evaluate(() => window.changes.length), before)
+  await page.evaluate(() => { window.limitDisabled = false; window.fixtureRefresh() })
+  labels.push('placeholder and read-only editor')
+  return labels
+}

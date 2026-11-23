@@ -1,0 +1,10 @@
+// Entry point for the checked-in browser bundle. Versions and licenses are in its header.
+export { Schema, Fragment, Slice } from 'prosemirror-model'
+export { EditorState, Selection } from 'prosemirror-state'
+export { EditorView } from 'prosemirror-view'
+export { baseKeymap, chainCommands, setBlockType, toggleMark } from 'prosemirror-commands'
+export { wrapInList, splitListItem, liftListItem } from 'prosemirror-schema-list'
+export { history, undo, redo, closeHistory } from 'prosemirror-history'
+export { keymap } from 'prosemirror-keymap'
+export { schema, MarkdownParser, MarkdownSerializer, defaultMarkdownParser, defaultMarkdownSerializer } from 'prosemirror-markdown'
+export { default as MarkdownIt } from 'markdown-it'
